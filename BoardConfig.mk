@@ -137,8 +137,6 @@ TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
 BOARD_VNDK_VERSION := current
 
 # TWRP display — 1080x2400, punch-hole AMOLED
-TARGET_COPY_OUT_VENDOR := vendor
-TARGET_COPY_OUT_PRODUCT := product
 TW_THEME              := portrait_hdpi
 TARGET_SCREEN_DENSITY := 393
 TW_MAX_BRIGHTNESS     := 4095

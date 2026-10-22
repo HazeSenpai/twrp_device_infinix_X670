@@ -1,0 +1,72 @@
+name: Build TWRP for Infinix NOTE 12 G96 (X670)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout device tree
+        uses: actions/checkout@v3
+        with:
+          path: device/infinix/X670
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git-core gnupg flex bison build-essential zip curl \
+            zlib1g-dev libc6-dev-i386 libncurses-dev lib32ncurses-dev \
+            x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev \
+            libxml2-utils xsltproc unzip fontconfig python3 \
+            python-is-python3 openjdk-11-jdk
+
+      - name: Set up repo tool
+        run: |
+          mkdir -p ~/.local/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.local/bin/repo
+          chmod a+x ~/.local/bin/repo
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure git
+        run: |
+          git config --global user.email "build@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Sync TWRP source
+        run: |
+          mkdir -p ~/TWRP && cd ~/TWRP
+          repo init --depth=1 \
+            -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git \
+            -b twrp-12.1
+          repo sync -j4 --no-clone-bundle --no-tags
+
+      - name: Move device tree into source
+        run: |
+          mkdir -p ~/TWRP/device/infinix
+          cp -r $GITHUB_WORKSPACE/device/infinix/X670 ~/TWRP/device/infinix/X670
+
+      - name: Build boot.img
+        run: |
+          cd ~/TWRP
+          export ALLOW_MISSING_DEPENDENCIES=true
+          source build/envsetup.sh
+          lunch twrp_X670-eng
+          mka bootimage -j4 2>&1 | tee build.log
+
+      - name: Upload boot.img
+        uses: actions/upload-artifact@v3
+        with:
+          name: TWRP-X670-boot
+          path: ~/TWRP/out/target/product/X670/boot.img
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-log
+          path: ~/TWRP/build.log
