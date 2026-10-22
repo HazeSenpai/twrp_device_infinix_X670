@@ -58,7 +58,7 @@ jobs:
           mka bootimage -j4 2>&1 | tee build.log
 
       - name: Upload boot.img
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: TWRP-X670-boot
           path: ~/TWRP/out/target/product/X670/boot.img
