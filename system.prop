@@ -1,0 +1,18 @@
+# Infinix NOTE 12 G96 (X670) — system.prop for TWRP recovery
+
+# USB
+ro.sys.usb.storage.type=mtp
+
+# Post-install fstab
+ro.postinstall.fstab.prefix=/system
+
+# Crypto
+ro.crypto.volume.filenames_mode=aes-256-cts
+
+# TEE — Trustonic (confirmed: /dev/block/by-name/tee1, tee2 in stock fstab)
+ro.hardware.gatekeeper=trustonic
+ro.vendor.mtk_tee_gp_support=1
+ro.vendor.mtk_trustonic_tee_support=1
+
+# Platform
+ro.board.platform=mt6781
