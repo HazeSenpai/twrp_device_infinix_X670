@@ -128,7 +128,7 @@ TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery/root/system/etc/recovery.fstab
 
 # Init lib
 TARGET_INIT_VENDOR_LIB         := libinit_X670
-TARGET_RECOVERY_DEVICE_MODULES := libinit_X670
+TARGET_RECOVERY_DEVICE_MODULES += libinit_X670
 
 # Properties
 TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
