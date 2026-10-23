@@ -1,7 +1,8 @@
 cc_library_shared {
     name: "libinit_X670",
     recovery_available: true,
-    srcs: ["init_Infinix-X670.cpp"],
+    srcs: ["init/init_Infinix-X670.cpp"],
     shared_libs: ["libbase"],
     cflags: ["-Wall"],
 }
+
