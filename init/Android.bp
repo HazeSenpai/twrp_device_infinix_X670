@@ -1,4 +1,4 @@
-cc_library_shared {
+cc_library_static {
     name: "libinit_X670",
     recovery_available: true,
     srcs: ["init_Infinix-X670.cpp"],
