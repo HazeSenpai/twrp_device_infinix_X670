@@ -5,14 +5,27 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  TWRP_DIR: /home/runner/TWRP
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
+      # ── 1. Checkout ───────────────────────────────────────────────────────────
       - name: Checkout device tree
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: device/infinix/X670
+
+      # ── 2. Dependencies (cached via apt) ──────────────────────────────────────
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        id: apt-cache
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-twrp-deps-v1
 
       - name: Install dependencies
         run: |
@@ -24,6 +37,7 @@ jobs:
             libxml2-utils xsltproc unzip fontconfig python3 \
             python-is-python3 openjdk-11-jdk
 
+      # ── 3. repo tool ──────────────────────────────────────────────────────────
       - name: Set up repo tool
         run: |
           mkdir -p ~/.local/bin
@@ -36,37 +50,83 @@ jobs:
           git config --global user.email "build@github.com"
           git config --global user.name "GitHub Actions"
 
+      # ── 4. TWRP source cache ──────────────────────────────────────────────────
+      # Key rotates weekly so you get a fresh sync every 7 days,
+      # but on repeated runs within the same week repo sync is a fast
+      # incremental update instead of a full 15 GB download.
+      - name: Get week number (for cache key rotation)
+        id: week
+        run: echo "week=$(date +%Y-W%V)" >> $GITHUB_OUTPUT
+
+      - name: Cache TWRP source
+        uses: actions/cache@v4
+        id: twrp-source-cache
+        with:
+          path: ${{ env.TWRP_DIR }}
+          key: twrp-source-12.1-${{ steps.week.outputs.week }}
+          restore-keys: |
+            twrp-source-12.1-
+
       - name: Sync TWRP source
         run: |
-          mkdir -p ~/TWRP && cd ~/TWRP
-          repo init --depth=1 \
-            -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git \
-            -b twrp-12.1
-          repo sync -j4 --no-clone-bundle --no-tags
+          mkdir -p $TWRP_DIR && cd $TWRP_DIR
+          # Init only when the .repo directory is absent (cache miss)
+          if [ ! -d ".repo" ]; then
+            repo init --depth=1 \
+              -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git \
+              -b twrp-12.1
+          fi
+          # Always sync — on a cache hit this is a quick incremental update
+          repo sync -j$(nproc) --no-clone-bundle --no-tags --force-sync
 
-      - name: Move device tree into source
+      # ── 5. Device tree ────────────────────────────────────────────────────────
+      - name: Place device tree
         run: |
-          mkdir -p ~/TWRP/device/infinix
-          cp -r $GITHUB_WORKSPACE/device/infinix/X670 ~/TWRP/device/infinix/X670
+          mkdir -p $TWRP_DIR/device/infinix
+          cp -r $GITHUB_WORKSPACE/device/infinix/X670 \
+                $TWRP_DIR/device/infinix/X670
 
+      # ── 6. Build output cache ─────────────────────────────────────────────────
+      # Caches host tools and generated headers so incremental builds skip
+      # most of the Java/host-tool compilation on subsequent runs.
+      # Keyed on device tree content so a device tree commit busts the cache.
+      - name: Hash device tree for cache key
+        id: dt-hash
+        run: |
+          echo "hash=$( find $GITHUB_WORKSPACE/device/infinix/X670 \
+            -type f | sort | xargs sha256sum | sha256sum | cut -c1-16 )" \
+            >> $GITHUB_OUTPUT
+
+      - name: Cache build output
+        uses: actions/cache@v4
+        id: out-cache
+        with:
+          path: ${{ env.TWRP_DIR }}/out
+          key: twrp-out-X670-${{ steps.week.outputs.week }}-${{ steps.dt-hash.outputs.hash }}
+          restore-keys: |
+            twrp-out-X670-${{ steps.week.outputs.week }}-
+            twrp-out-X670-
+
+      # ── 7. Build ──────────────────────────────────────────────────────────────
       - name: Build boot.img
         run: |
-          cd ~/TWRP
+          cd $TWRP_DIR
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
           lunch twrp_X670-eng
-          mka bootimage -j4 2>&1 | tee build.log
+          mka bootimage -j$(nproc) 2>&1 | tee build.log
 
+      # ── 8. Artifacts ──────────────────────────────────────────────────────────
       - name: Upload boot.img
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-X670-boot
-          path: ~/TWRP/out/target/product/X670/boot.img
+          name: TWRP-X670-boot-${{ github.sha }}
+          path: ${{ env.TWRP_DIR }}/out/target/product/X670/boot.img
           if-no-files-found: error
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: ~/TWRP/build.log
+          name: build-log-${{ github.sha }}
+          path: ${{ env.TWRP_DIR }}/build.log
